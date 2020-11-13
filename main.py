@@ -132,8 +132,8 @@ def create_lc_security_group(client, security_group_name):
                 GroupName=security_group_name,
                 IpPermissions=[
                     {'IpProtocol': 'tcp', 
-                        'FromPort': 80, 
-                        'ToPort': 80,
+                        'FromPort': 8080, 
+                        'ToPort': 8080,
                         'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
                     }]
             )
@@ -174,7 +174,7 @@ def create_api_security_group(client, security_group_name):
                 GroupName=security_group_name,
                 IpPermissions=[
                     {'IpProtocol': 'tcp', 
-                        'FromPort': 80, 
+                        'FromPort': 8080, 
                         'ToPort': 8080,
                         'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
                     }]
@@ -220,15 +220,13 @@ def create_instance_db(ec2, client, imageId, minCount, maxCount, keyname, tags, 
         SecurityGroups=[
             sg_name,
         ], 
-        UserData='''#!/etc/bash
+        UserData='''#!/bin/bash
         sudo apt update
         sudo apt install postgresql postgresql-contrib -y
-        sudo su - postgres
-        psql -c "CREATE USER cloud WITH PASSWORD 'cloud';"
-        createdb -O cloud tasks
-        sed -i "/#listen_addresses = 'localhost'/ a\listen_addresses='*'" /etc/postgresql/9/main/postgresql.conf
-        sed -i "/local   replication     all                                     peer/ a\host all all 0.0.0.0/0 md5" /etc/postgresql/9/main/pg_hba.conf
-        exit
+        sudo -u postgres psql -c "CREATE USER cloud WITH PASSWORD 'cloud';"
+        sudo -u postgres createdb -O cloud tasks
+        sudo sed -i "/#listen_addresses = 'localhost'/ a\listen_addresses='*'" /etc/postgresql/10/main/postgresql.conf
+        sudo sed -i "/local   replication     all                                     peer/ a\host all all 0.0.0.0/0 md5" /etc/postgresql/10/main/pg_hba.conf
         sudo ufw allow 5432/tcp
         sudo systemctl restart postgresql 
         ''', 
@@ -276,14 +274,14 @@ def create_instance_api(ec2, client, imageId, minCount, maxCount, keyname, tags,
         SecurityGroups=[
             sg_name,
         ],
-        UserData='''#!/bin/sh
+        UserData='''#!/bin/bash
         sudo apt update
         sudo apt install python3-dev libpq-dev python3-pip -y
+        cd /home/ubuntu
         git clone https://github.com/gicabral/tasks.git
-        mv tasks /home/ubuntu
-        sudo sed -i -e 's/node1/{}/g' /home/ubuntu/tasks/portfolio/settings.py
-        sh ./home/ubuntu/tasks/install.sh
-        echo "@reboot sh /home/ubuntu/tasks/run.sh" >> crontab
+        sudo sed -i 's/node1/{}/g' /home/ubuntu/tasks/portfolio/settings.py
+        cd tasks
+        ./install.sh
         sudo reboot
         '''.format(ip_database), 
         TagSpecifications=[
@@ -297,6 +295,8 @@ def create_instance_api(ec2, client, imageId, minCount, maxCount, keyname, tags,
     # Wait until it's created
     waiter = client.get_waiter('instance_status_ok')
     waiter.wait(InstanceIds=[response[0].id])
+
+    return response[0].id
 
 def terminate_instance(client, keyname):
     response =  client.describe_instances(
@@ -331,7 +331,7 @@ def create_target_group(client, client_lb, target_group_name):
     response = client_lb.create_target_group(
         Name=target_group_name,
         Protocol='HTTP',
-        Port=80,
+        Port=8080,
         VpcId=vpcId,
         HealthCheckProtocol='HTTP',
         HealthCheckPath='/',
@@ -351,30 +351,30 @@ def delete_target_group(client, target_group_name):
     except ClientError as e:
         print(f"Could not delete target group '{target_group_name}'. Error: {e}")
 
-def create_launch_configuration(client, amiName, lauch_configuration_name, keyname, sg):
-    response = client.create_launch_configuration(
-        LaunchConfigurationName=lauch_configuration_name,
-        InstanceType='t2.micro', 
-        KeyName=keyname,
-        InstanceMonitoring={'Enabled': True},
-        SecurityGroups=[sg],
-        ImageId=amiName,
-        UserData="""
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            sudo sh get-docker.sh
-            sudo curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
+# def create_launch_configuration(client, amiName, lauch_configuration_name, keyname, sg):
+#     response = client.create_launch_configuration(
+#         LaunchConfigurationName=lauch_configuration_name,
+#         InstanceType='t2.micro', 
+#         KeyName=keyname,
+#         InstanceMonitoring={'Enabled': True},
+#         SecurityGroups=[sg],
+#         ImageId=amiName,
+#         UserData="""
+#             curl -fsSL https://get.docker.com -o get-docker.sh
+#             sudo sh get-docker.sh
+#             sudo curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+#             sudo chmod +x /usr/local/bin/docker-compose
 
-            sudo docker run -d --name=netdata -p 80:19999 \
-            -v /proc:/host/proc:ro \
-            -v /sys:/host/sys:ro \
-            -v /var/run/docker.sock:/var/run/docker.sock:ro \
-            --cap-add SYS_PTRACE \
-            --security-opt apparmor=unconfined \
-            netdata/netdata
-        """
-    )
-    print(f"LC '{lauch_configuration_name}' created.")
+#             sudo docker run -d --name=netdata -p 80:19999 \
+#             -v /proc:/host/proc:ro \
+#             -v /sys:/host/sys:ro \
+#             -v /var/run/docker.sock:/var/run/docker.sock:ro \
+#             --cap-add SYS_PTRACE \
+#             --security-opt apparmor=unconfined \
+#             netdata/netdata
+#         """
+#     )
+#     print(f"LC '{lauch_configuration_name}' created.")
 
 def delete_launch_configuration(client, lauch_configuration_name):
     try:
@@ -401,7 +401,6 @@ def create_load_balancer(nv_client, nv_client_lb, load_balancer_name, security_g
     
     waiter = nv_client_lb.get_waiter('load_balancer_exists')
     waiter.wait(LoadBalancerArns=[create_lb_response['LoadBalancers'][0]['LoadBalancerArn']])
-    time.sleep(60)
 
     print(f"Load balancer '{load_balancer_name}' created.")
     return create_lb_response['LoadBalancers'][0]['LoadBalancerArn']
@@ -424,7 +423,7 @@ def createListener(nv_client_lb, tg, lb):
     response = nv_client_lb.create_listener(
         LoadBalancerArn = lb,
         Protocol='HTTP',
-        Port=80,
+        Port=8080,
         DefaultActions=[
             {
                 'Type': 'forward',
@@ -433,20 +432,14 @@ def createListener(nv_client_lb, tg, lb):
         ]
     )
 
-def create_auto_scaling(nv_client_asg, min_instances, targetGroup, nv_lc_name, nv_asg_name):
+def create_auto_scaling(nv_client_asg, min_instances, targetGroup, nv_lc_name, nv_asg_name, instanceid):
     response = nv_client_asg.create_auto_scaling_group(
         AutoScalingGroupName=nv_asg_name,
         MinSize=min_instances,
         MaxSize=4,
+        InstanceId = instanceid,
         DesiredCapacity=min_instances,
-        LaunchConfigurationName=nv_lc_name,
         TargetGroupARNs=[targetGroup],
-        AvailabilityZones=['us-east-1a',
-            'us-east-1b',
-            'us-east-1c',
-            'us-east-1d',
-            'us-east-1e',
-            'us-east-1f'],
         Tags=[
             {
                 'Key'  : 'Owner',
@@ -489,23 +482,24 @@ delete_security_group(oh_client, oh_api_sg_name)
 
 create_keypair(oh_ec2, oh_keypair_name, oh_keypair_name)
 create_db_security_group(oh_client, oh_db_sg_name)
-create_api_security_group(oh_client, oh_api_sg_name)
 
 ip_database = create_instance_db(oh_ec2, oh_client, oh_ami_ubuntu18, min_instances, max_instances, oh_keypair_name, tags, oh_db_sg_name)
-create_instance_api(oh_ec2, oh_client, oh_ami_ubuntu18, min_instances, max_instances, oh_keypair_name, tags, ip_database, oh_api_sg_name)
 
 # Configs for North Virginia
 delete_autoscaling(nv_client_asg, nv_asg_name)
 delete_load_balancer(nv_client_lb, nv_lb_name)
 delete_target_group(nv_client_lb, nv_tg_name)
-delete_launch_configuration(nv_client_asg, nv_lc_name)
+delete_launch_configuration(nv_client_asg, nv_asg_name)
 delete_keypair(nv_client, nv_keypair_name)
+terminate_instance(nv_client, nv_keypair_name)
 delete_security_group(nv_client, nv_client_sg_name)
 
 create_keypair(nv_ec2, nv_keypair_name, nv_keypair_name)
-create_lc_security_group(nv_client, nv_client_sg_name)
+#create_lc_security_group(nv_client, nv_client_sg_name)
+create_api_security_group(nv_client, nv_client_sg_name)
+id_django = create_instance_api(nv_ec2, nv_client, nv_ami_ubuntu18, min_instances, max_instances, nv_keypair_name, tags, ip_database, nv_client_sg_name)
 nv_tg_arn = create_target_group(nv_client, nv_client_lb, nv_tg_name)
-create_launch_configuration(nv_client_asg, nv_ami_ubuntu18, nv_lc_name, nv_keypair_name, nv_client_sg_name)
+#create_launch_configuration(nv_client_asg, nv_ami_ubuntu18, nv_lc_name, nv_keypair_name, nv_client_sg_name)
 nv_lb_arn = create_load_balancer(nv_client, nv_client_lb, nv_lb_name, nv_client_sg_name)
 createListener(nv_client_lb, nv_tg_arn, nv_lb_arn)
-create_auto_scaling(nv_client_asg, 1, nv_tg_arn, nv_lc_name, nv_asg_name)
+create_auto_scaling(nv_client_asg, 1, nv_tg_arn, nv_lc_name, nv_asg_name, id_django)
