@@ -54,9 +54,9 @@ if __name__ == '__main__':
         atualizar()
     if sys.argv[1] == '--help':    
         print("Digite --listar DNS_load_balancer para listar todas as tarefas. \n",
-        "Digite --adicionar para adicionar uma tarefa \n ", 
-        "Digite --deletar para deletar uma tarefa \n",
-        "Digite --atualizar para atualizar uma tarefa \n")
+        "Digite --adicionar DNS_load_balancer para adicionar uma tarefa \n ", 
+        "Digite --deletar DNS_load_balancer --id ID para deletar uma tarefa \n",
+        "Digite --atualizar DNS_load_balancer --id ID para atualizar uma tarefa \n")
 
 
 
