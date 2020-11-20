@@ -40,10 +40,8 @@ def deletar(deletar, id):
 def atualizar(atualizar, id):
     with open("update_tasks.json") as json_file:
         data = json.load(json_file)
-    r = requests.put('http://'+atualizar+':8080/tasks/atualizar'+id, json=data)
-    print(r.text)  
-    print(atualizar)
-          
+    r = requests.put('http://'+atualizar+':8080/tasks/atualizar/'+id, json=data)
+    print(r.text)            
 
 if __name__ == '__main__':
     if sys.argv[1] == '--listar':
