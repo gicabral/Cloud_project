@@ -10,14 +10,14 @@ oh_db_name = "GI_DB"
 oh_db_sg_name = "GI_DB_sg"
 oh_api_name = "GI_API"
 oh_api_sg_name = "GI_API_sg"
-oh_ami_ubuntu18 = "ami-0e82959d4ed12de3f"
+oh_ami_ubuntu18 = "ami-0dd9f0e7df0f0a138"
 
 # Global variables for North Virginia
-nv_region = "us-east-1"
+nv_region = "us-west-2"
 nv_keypair_name = "GI_kp_nv"
 nv_client_name = "GI_DB"
 nv_client_sg_name = "GI_DB_sg"
-nv_ami_ubuntu18 = "ami-0817d428a6fb68645"
+nv_ami_ubuntu18 = "ami-0ac73f33a1888c64a"
 nv_tg_name = "GI-tg"
 nv_asg_name = "GI_asg"
 nv_lb_name = "GI-lb"
@@ -49,6 +49,7 @@ tags = [
         }
 ]
 
+###################################### KEY PAIR ######################################
 def create_keypair(ec2, filename, keyname):
     try:
         keypair = ec2.create_key_pair(KeyName=keyname)
@@ -72,6 +73,8 @@ def delete_keypair(client, keyname):
     except ClientError as e:
         print(f"Could not delete keypair '{keyname}'. Error: {e}")
 
+###################################### SECURITY GROUP ######################################
+
 def create_db_security_group(client, security_group_name):
     try:
         # Get VPC id
@@ -92,48 +95,6 @@ def create_db_security_group(client, security_group_name):
                     {'IpProtocol': 'tcp', 
                         'FromPort': 5432, 
                         'ToPort': 5432,
-                        'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-                    }]
-            )
-
-            # Allow 22
-            response = client.authorize_security_group_ingress(
-                GroupName=security_group_name,
-                IpPermissions=[
-                    {'IpProtocol': 'tcp', 
-                        'FromPort': 22, 
-                        'ToPort': 22,
-                        'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-                    }]
-            )
-            print(f"Security group and ingress rule for '{security_group_name}' created.")
-
-        except ClientError as e:
-                print(f"Could not create ingress rule for '{security_group_name}'. Error: {e}")
-        
-    except ClientError as e:
-        print(f"Could not create security group '{security_group_name}'. Error: {e}")
-
-def create_lc_security_group(client, security_group_name):
-    try:
-        # Get VPC id
-        response = client.describe_vpcs()
-        vpcId = response["Vpcs"][0]["VpcId"]
-        # Create sg
-        response_sg = client.create_security_group(
-            Description="Projeto Final Giovanna",
-            GroupName=security_group_name,
-            VpcId=vpcId
-        )
-
-        try:
-            # Allow 80
-            response = client.authorize_security_group_ingress(
-                GroupName=security_group_name,
-                IpPermissions=[
-                    {'IpProtocol': 'tcp', 
-                        'FromPort': 8080, 
-                        'ToPort': 8080,
                         'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
                     }]
             )
@@ -208,6 +169,8 @@ def delete_security_group(client, security_group_name):
             print(f"Could not delete security group '{security_group_name}'. Error: {e}")
     except ClientError as e:
         print(f"Could not find security group '{security_group_name}'. Error: {e}")
+
+ ###################################### INSTANCES ######################################       
 
 def create_instance_db(ec2, client, imageId, minCount, maxCount, keyname, tags, sg_name):
     # Create instance
@@ -322,6 +285,7 @@ def terminate_instance(client, keyname):
 
     print("Instances terminated.")
 
+###################################### TARGET GROUP ######################################
 
 def create_target_group(client, client_lb, target_group_name):
     # Get VPC id
@@ -351,30 +315,7 @@ def delete_target_group(client, target_group_name):
     except ClientError as e:
         print(f"Could not delete target group '{target_group_name}'. Error: {e}")
 
-# def create_launch_configuration(client, amiName, lauch_configuration_name, keyname, sg):
-#     response = client.create_launch_configuration(
-#         LaunchConfigurationName=lauch_configuration_name,
-#         InstanceType='t2.micro', 
-#         KeyName=keyname,
-#         InstanceMonitoring={'Enabled': True},
-#         SecurityGroups=[sg],
-#         ImageId=amiName,
-#         UserData="""
-#             curl -fsSL https://get.docker.com -o get-docker.sh
-#             sudo sh get-docker.sh
-#             sudo curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-#             sudo chmod +x /usr/local/bin/docker-compose
-
-#             sudo docker run -d --name=netdata -p 80:19999 \
-#             -v /proc:/host/proc:ro \
-#             -v /sys:/host/sys:ro \
-#             -v /var/run/docker.sock:/var/run/docker.sock:ro \
-#             --cap-add SYS_PTRACE \
-#             --security-opt apparmor=unconfined \
-#             netdata/netdata
-#         """
-#     )
-#     print(f"LC '{lauch_configuration_name}' created.")
+###################################### LAUNCH CONFIGURATION ######################################
 
 def delete_launch_configuration(client, lauch_configuration_name):
     try:
@@ -383,12 +324,13 @@ def delete_launch_configuration(client, lauch_configuration_name):
     except ClientError as e:
         print("No Launch Configuration called "+ lauch_configuration_name)
 
+###################################### LOAD BALANCER ######################################
 
 def create_load_balancer(nv_client, nv_client_lb, load_balancer_name, security_group_name):
     security_group = nv_client.describe_security_groups(GroupNames=[security_group_name])["SecurityGroups"][0]["GroupId"]
 
     response_subnet = nv_client.describe_subnets()
-    subnets_ids = [response_subnet['Subnets'][i]['SubnetId'] for i in range(6)]
+    subnets_ids = [response_subnet['Subnets'][i]['SubnetId'] for i in range(len(response_subnet['Subnets']))]     
 
     create_lb_response  = nv_client_lb.create_load_balancer(
         Name=load_balancer_name,
@@ -419,6 +361,8 @@ def delete_load_balancer(nv_client_lb, load_balancer_name):
     except ClientError as e:
         print(f"Could not find Load balancer '{load_balancer_name}'. Error: {e}")
 
+###################################### LISTENER ######################################
+
 def createListener(nv_client_lb, tg, lb):
     response = nv_client_lb.create_listener(
         LoadBalancerArn = lb,
@@ -431,6 +375,8 @@ def createListener(nv_client_lb, tg, lb):
             }
         ]
     )
+
+###################################### AUTO SCALING ######################################
 
 def create_auto_scaling(nv_client_asg, min_instances, targetGroup, nv_lc_name, nv_asg_name, instanceid):
     response = nv_client_asg.create_auto_scaling_group(
@@ -485,7 +431,7 @@ create_db_security_group(oh_client, oh_db_sg_name)
 
 ip_database = create_instance_db(oh_ec2, oh_client, oh_ami_ubuntu18, min_instances, max_instances, oh_keypair_name, tags, oh_db_sg_name)
 
-# Configs for North Virginia
+#Configs for North Virginia
 delete_autoscaling(nv_client_asg, nv_asg_name)
 delete_load_balancer(nv_client_lb, nv_lb_name)
 delete_target_group(nv_client_lb, nv_tg_name)
@@ -495,11 +441,9 @@ terminate_instance(nv_client, nv_keypair_name)
 delete_security_group(nv_client, nv_client_sg_name)
 
 create_keypair(nv_ec2, nv_keypair_name, nv_keypair_name)
-#create_lc_security_group(nv_client, nv_client_sg_name)
 create_api_security_group(nv_client, nv_client_sg_name)
 id_django = create_instance_api(nv_ec2, nv_client, nv_ami_ubuntu18, min_instances, max_instances, nv_keypair_name, tags, ip_database, nv_client_sg_name)
 nv_tg_arn = create_target_group(nv_client, nv_client_lb, nv_tg_name)
-#create_launch_configuration(nv_client_asg, nv_ami_ubuntu18, nv_lc_name, nv_keypair_name, nv_client_sg_name)
 nv_lb_arn = create_load_balancer(nv_client, nv_client_lb, nv_lb_name, nv_client_sg_name)
 createListener(nv_client_lb, nv_tg_arn, nv_lb_arn)
 create_auto_scaling(nv_client_asg, 1, nv_tg_arn, nv_lc_name, nv_asg_name, id_django)
