@@ -326,13 +326,13 @@ def delete_launch_configuration(client, lauch_configuration_name):
 
 ###################################### LOAD BALANCER ######################################
 
-def create_load_balancer(nv_client, nv_client_lb, load_balancer_name, security_group_name):
-    security_group = nv_client.describe_security_groups(GroupNames=[security_group_name])["SecurityGroups"][0]["GroupId"]
+def create_load_balancer(og_client, og_client_lb, load_balancer_name, security_group_name):
+    security_group = og_client.describe_security_groups(GroupNames=[security_group_name])["SecurityGroups"][0]["GroupId"]
 
-    response_subnet = nv_client.describe_subnets()
+    response_subnet = og_client.describe_subnets()
     subnets_ids = [response_subnet['Subnets'][i]['SubnetId'] for i in range(len(response_subnet['Subnets']))]     
 
-    create_lb_response  = nv_client_lb.create_load_balancer(
+    create_lb_response  = og_client_lb.create_load_balancer(
         Name=load_balancer_name,
         Subnets=subnets_ids,
         SecurityGroups=[security_group],
@@ -341,20 +341,20 @@ def create_load_balancer(nv_client, nv_client_lb, load_balancer_name, security_g
         IpAddressType='ipv4'
     )
     
-    waiter = nv_client_lb.get_waiter('load_balancer_exists')
+    waiter = og_client_lb.get_waiter('load_balancer_exists')
     waiter.wait(LoadBalancerArns=[create_lb_response['LoadBalancers'][0]['LoadBalancerArn']])
     dns_name = create_lb_response['LoadBalancers'][0]["DNSName"]
 
     print(f"Load balancer '{load_balancer_name}' created. DNS NAME: '{dns_name}'")
     return create_lb_response['LoadBalancers'][0]['LoadBalancerArn']
 
-def delete_load_balancer(nv_client_lb, load_balancer_name):
+def delete_load_balancer(og_client_lb, load_balancer_name):
     try:
-        lbalancer = nv_client_lb.describe_load_balancers(Names=[load_balancer_name])["LoadBalancers"][0]["LoadBalancerArn"]
+        lbalancer = og_client_lb.describe_load_balancers(Names=[load_balancer_name])["LoadBalancers"][0]["LoadBalancerArn"]
         
-        response = nv_client_lb.delete_load_balancer(LoadBalancerArn=lbalancer)
+        response = og_client_lb.delete_load_balancer(LoadBalancerArn=lbalancer)
 
-        waiter = nv_client_lb.get_waiter('load_balancers_deleted')
+        waiter = og_client_lb.get_waiter('load_balancers_deleted')
         waiter.wait(LoadBalancerArns=[lbalancer])
         time.sleep(60)
         print(f"Load balancer '{load_balancer_name}' deleted.")
@@ -364,8 +364,8 @@ def delete_load_balancer(nv_client_lb, load_balancer_name):
 
 ###################################### LISTENER ######################################
 
-def createListener(nv_client_lb, tg, lb):
-    response = nv_client_lb.create_listener(
+def createListener(og_client_lb, tg, lb):
+    response = og_client_lb.create_listener(
         LoadBalancerArn = lb,
         Protocol='HTTP',
         Port=8080,
@@ -379,9 +379,9 @@ def createListener(nv_client_lb, tg, lb):
 
 ###################################### AUTO SCALING ######################################
 
-def create_auto_scaling(nv_client_asg, min_instances, targetGroup, nv_lc_name, nv_asg_name, instanceid):
-    response = nv_client_asg.create_auto_scaling_group(
-        AutoScalingGroupName=nv_asg_name,
+def create_auto_scaling(og_client_asg, min_instances, targetGroup, og_lc_name, og_asg_name, instanceid):
+    response = og_client_asg.create_auto_scaling_group(
+        AutoScalingGroupName=og_asg_name,
         MinSize=min_instances,
         MaxSize=4,
         InstanceId = instanceid,
@@ -398,26 +398,26 @@ def create_auto_scaling(nv_client_asg, min_instances, targetGroup, nv_lc_name, n
             }]       
     )
 
-    print(f"Autoscaling '{nv_asg_name}' created.")
+    print(f"Autoscaling '{og_asg_name}' created.")
 
 
-def delete_autoscaling(nv_client_asg, nv_asg_name):
-    response = nv_client_asg.describe_auto_scaling_groups(AutoScalingGroupNames=[nv_asg_name])
+def delete_autoscaling(og_client_asg, og_asg_name):
+    response = og_client_asg.describe_auto_scaling_groups(AutoScalingGroupNames=[og_asg_name])
     if len(response['AutoScalingGroups']) > 0:
         try:
-            response = nv_client_asg.delete_auto_scaling_group(
-                AutoScalingGroupName=nv_asg_name,
+            response = og_client_asg.delete_auto_scaling_group(
+                AutoScalingGroupName=og_asg_name,
                 ForceDelete=True
             )
 
-            response = nv_client_asg.describe_auto_scaling_groups(AutoScalingGroupNames=[nv_asg_name])
+            response = og_client_asg.describe_auto_scaling_groups(AutoScalingGroupNames=[og_asg_name])
             while response['AutoScalingGroups']:
-                response = nv_client_asg.describe_auto_scaling_groups(AutoScalingGroupNames=[nv_asg_name])
+                response = og_client_asg.describe_auto_scaling_groups(AutoScalingGroupNames=[og_asg_name])
                 time.sleep(5)
 
             print("[LOG] Autoscaling group deleted")
         except ClientError as e:
-            print(f"[LOG] Could not delete autoscaling group {nv_asg_name}. Error: {e}")
+            print(f"[LOG] Could not delete autoscaling group {og_asg_name}. Error: {e}")
     else:
         print("[LOG] Autoscaling group does not exist")
 
@@ -431,7 +431,7 @@ create_db_security_group(oh_client, oh_db_sg_name)
 
 ip_database = create_instance_db(oh_ec2, oh_client, oh_ami_ubuntu18, min_instances, max_instances, oh_keypair_name, tags, oh_db_sg_name)
 
-#Configs for North Virginia
+#Configs for Oregon
 delete_autoscaling(og_client_asg, og_asg_name)
 delete_load_balancer(og_client_lb, og_lb_name)
 delete_target_group(og_client_lb, og_tg_name)
