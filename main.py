@@ -12,22 +12,22 @@ oh_api_name = "GI_API"
 oh_api_sg_name = "GI_API_sg"
 oh_ami_ubuntu18 = "ami-0dd9f0e7df0f0a138"
 
-# Global variables for North Virginia
-nv_region = "us-west-2"
-nv_keypair_name = "GI_kp_nv"
-nv_client_name = "GI_DB"
-nv_client_sg_name = "GI_DB_sg"
-nv_ami_ubuntu18 = "ami-0ac73f33a1888c64a"
-nv_tg_name = "GI-tg"
-nv_asg_name = "GI_asg"
-nv_lb_name = "GI-lb"
-nv_lc_name = "GI_lc"
+# Global variables for Oregon
+og_region = "us-west-2"
+og_keypair_name = "GI_kp_og"
+og_client_name = "GI_DB"
+og_client_sg_name = "GI_DB_sg"
+og_ami_ubuntu18 = "ami-0ac73f33a1888c64a"
+og_tg_name = "GI-tg"
+og_asg_name = "GI_asg"
+og_lb_name = "GI-lb"
+og_lc_name = "GI_lc"
 
-# Create Boto3 resources for North Virginia
-nv_client_lb = boto3.client('elbv2', region_name=nv_region)
-nv_client = boto3.client('ec2', region_name=nv_region)
-nv_client_asg = boto3.client('autoscaling', region_name=nv_region)
-nv_ec2 = boto3.resource("ec2", region_name=nv_region)
+# Create Boto3 resources for Oregon
+og_client_lb = boto3.client('elbv2', region_name=og_region)
+og_client = boto3.client('ec2', region_name=og_region)
+og_client_asg = boto3.client('autoscaling', region_name=og_region)
+og_ec2 = boto3.resource("ec2", region_name=og_region)
 
 
 min_instances = 1
@@ -343,8 +343,9 @@ def create_load_balancer(nv_client, nv_client_lb, load_balancer_name, security_g
     
     waiter = nv_client_lb.get_waiter('load_balancer_exists')
     waiter.wait(LoadBalancerArns=[create_lb_response['LoadBalancers'][0]['LoadBalancerArn']])
+    dns_name = create_lb_response['LoadBalancers'][0]["DNSName"]
 
-    print(f"Load balancer '{load_balancer_name}' created.")
+    print(f"Load balancer '{load_balancer_name}' created. DNS NAME: '{dns_name}'")
     return create_lb_response['LoadBalancers'][0]['LoadBalancerArn']
 
 def delete_load_balancer(nv_client_lb, load_balancer_name):
@@ -424,7 +425,6 @@ def delete_autoscaling(nv_client_asg, nv_asg_name):
 terminate_instance(oh_client, oh_keypair_name)
 delete_keypair(oh_client, oh_keypair_name)
 delete_security_group(oh_client, oh_db_sg_name)
-delete_security_group(oh_client, oh_api_sg_name)
 
 create_keypair(oh_ec2, oh_keypair_name, oh_keypair_name)
 create_db_security_group(oh_client, oh_db_sg_name)
@@ -432,18 +432,18 @@ create_db_security_group(oh_client, oh_db_sg_name)
 ip_database = create_instance_db(oh_ec2, oh_client, oh_ami_ubuntu18, min_instances, max_instances, oh_keypair_name, tags, oh_db_sg_name)
 
 #Configs for North Virginia
-delete_autoscaling(nv_client_asg, nv_asg_name)
-delete_load_balancer(nv_client_lb, nv_lb_name)
-delete_target_group(nv_client_lb, nv_tg_name)
-delete_launch_configuration(nv_client_asg, nv_asg_name)
-delete_keypair(nv_client, nv_keypair_name)
-terminate_instance(nv_client, nv_keypair_name)
-delete_security_group(nv_client, nv_client_sg_name)
+delete_autoscaling(og_client_asg, og_asg_name)
+delete_load_balancer(og_client_lb, og_lb_name)
+delete_target_group(og_client_lb, og_tg_name)
+delete_launch_configuration(og_client_asg, og_asg_name)
+delete_keypair(og_client, og_keypair_name)
+terminate_instance(og_client, og_keypair_name)
+delete_security_group(og_client, og_client_sg_name)
 
-create_keypair(nv_ec2, nv_keypair_name, nv_keypair_name)
-create_api_security_group(nv_client, nv_client_sg_name)
-id_django = create_instance_api(nv_ec2, nv_client, nv_ami_ubuntu18, min_instances, max_instances, nv_keypair_name, tags, ip_database, nv_client_sg_name)
-nv_tg_arn = create_target_group(nv_client, nv_client_lb, nv_tg_name)
-nv_lb_arn = create_load_balancer(nv_client, nv_client_lb, nv_lb_name, nv_client_sg_name)
-createListener(nv_client_lb, nv_tg_arn, nv_lb_arn)
-create_auto_scaling(nv_client_asg, 1, nv_tg_arn, nv_lc_name, nv_asg_name, id_django)
+create_keypair(og_ec2, og_keypair_name, og_keypair_name)
+create_api_security_group(og_client, og_client_sg_name)
+id_django = create_instance_api(og_ec2, og_client, og_ami_ubuntu18, min_instances, max_instances, og_keypair_name, tags, ip_database, og_client_sg_name)
+og_tg_arn = create_target_group(og_client, og_client_lb, og_tg_name)
+og_lb_arn = create_load_balancer(og_client, og_client_lb, og_lb_name, og_client_sg_name)
+createListener(og_client_lb, og_tg_arn, og_lb_arn)
+create_auto_scaling(og_client_asg, 1, og_tg_arn, og_lc_name, og_asg_name, id_django)
