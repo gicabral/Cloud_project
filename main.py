@@ -346,6 +346,14 @@ def create_load_balancer(og_client, og_client_lb, load_balancer_name, security_g
     dns_name = create_lb_response['LoadBalancers'][0]["DNSName"]
 
     print(f"Load balancer '{load_balancer_name}' created. DNS NAME: '{dns_name}'")
+
+    with open ("gicli.py", "r") as file:
+        lines = file.readlines()
+        lines[6] = f'dns = "{dns_name}" \n'
+
+    with open("gicli.py", "w") as file:
+        file.writelines(lines)
+        
     return create_lb_response['LoadBalancers'][0]['LoadBalancerArn']
 
 def delete_load_balancer(og_client_lb, load_balancer_name):
