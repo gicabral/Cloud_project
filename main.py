@@ -88,7 +88,7 @@ def create_db_security_group(client, security_group_name):
         )
 
         try:
-            # Allow 8080
+            # Allow 5432
             response = client.authorize_security_group_ingress(
                 GroupName=security_group_name,
                 IpPermissions=[
