@@ -49,4 +49,4 @@ A aplicação cliente foi feita no arquivo gicli.py utilizando o Click. Os coman
   $ ./gicli.py deletar -id [colocar id da tarefa]
   $ ./gicli.py atualizar -id [colocar id da tarefa] -t [colocar novo título] -d [colocar nova descrição]
 
-```Cloud infrastructure only
+```
